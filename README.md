@@ -43,9 +43,12 @@ go test ./...
 ## 릴리즈
 
 새 버전은 `VERSION`과 `openapi.yaml`의 `info.version`에 적습니다. main의
-CI가 통과하면 Linux amd64·arm64 이미지를 만들고, 두 이미지로 1,024개 노드
-샘플을 렌더링합니다. 테스트한 이미지 digest를 버전 태그로 발행하고 GitHub
-릴리즈에 기록합니다. 이미지에는 SBOM과 빌드 provenance가 첨부됩니다.
+CI가 통과한 뒤 GitHub Actions의 **Release**에서 main을 선택하고 같은 버전을
+입력합니다. 워크플로가 해당 커밋의 CI 성공 여부를 확인합니다.
+
+Linux amd64·arm64 이미지에서 각각 1,024개 노드 샘플을 렌더링합니다.
+테스트한 digest를 GHCR 버전 태그로 발행하고 GitHub 릴리즈에 기록합니다.
+이미지에는 SBOM과 빌드 provenance가 첨부됩니다.
 
 ## 라이선스
 
