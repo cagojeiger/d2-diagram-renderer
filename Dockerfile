@@ -1,12 +1,16 @@
-FROM golang:1.27.0 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.4@sha256:205c7636d74e0ffbe3d007162df7d74f859f5a8c8322dfb9f907977686c126cf AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY main.go render.go ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /d2-diagram-renderer .
+ARG TARGETOS TARGETARCH
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /d2-diagram-renderer .
 
 FROM scratch
+LABEL org.opencontainers.image.source="https://github.com/cagojeiger/d2-diagram-renderer" \
+      org.opencontainers.image.licenses="Apache-2.0"
 COPY --from=build /d2-diagram-renderer /d2-diagram-renderer
+COPY LICENSE THIRD_PARTY_NOTICES.md /
 ENV LISTEN_ADDR=:8080
 USER 10001:10001
 EXPOSE 8080
