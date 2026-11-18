@@ -91,8 +91,13 @@ jobs:
         env:
           DIGEST: ${{ steps.image.outputs.digest }}
         run: |
-          for platform in linux/amd64 linux/arm64; do
-            bash .github/scripts/smoke-image.sh "$IMAGE@$DIGEST" "$platform"
+          index=$(docker buildx imagetools inspect --raw "$IMAGE@$DIGEST")
+          for arch in amd64 arm64; do
+            child_digest=$(jq -er --arg arch "$arch" '
+              [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest]
+              | if length == 1 then .[0] else error("Expected one manifest for linux/" + $arch) end
+            ' <<< "$index")
+            bash .github/scripts/smoke-image.sh "$IMAGE@$child_digest" "linux/$arch"
           done
       - name: Publish the tested digest and GitHub release
         env:
