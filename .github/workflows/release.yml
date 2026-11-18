@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: release
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      packages: write
+    env:
+      IMAGE: ghcr.io/cagojeiger/d2-diagram-renderer
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Select the unpublished version from main
+        id: version
+        run: |
+          main=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          if [[ "$main" != "$SOURCE_SHA" ]]; then
+            echo "CI completed for an older main commit."
+            exit 0
+          fi
+
+          version=$(cat VERSION)
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          tag="v$version"
+          published=$(git ls-remote origin "refs/tags/$tag")
+          if [[ -n "$published" ]]; then
+            echo "$tag already exists."
+            exit 0
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+        if: steps.version.outputs.tag != ''
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+        if: steps.version.outputs.tag != ''
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
+        if: steps.version.outputs.tag != ''
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build the release candidate
+        id: image
+        if: steps.version.outputs.tag != ''
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          sbom: true
+          provenance: mode=max
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.tag }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+      - name: Smoke-test both architectures by digest
+        if: steps.version.outputs.tag != ''
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          for platform in linux/amd64 linux/arm64; do
+            bash .github/scripts/smoke-image.sh "$IMAGE@$DIGEST" "$platform"
+          done
+      - name: Publish the tested digest and GitHub release
+        if: steps.version.outputs.tag != ''
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          main=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          test "$main" = "$SOURCE_SHA"
+          published=$(git ls-remote origin "refs/tags/$TAG")
+          test -z "$published"
+          docker buildx imagetools create --tag "$IMAGE:$TAG" "$IMAGE@$DIGEST"
+          gh release create "$TAG" --target "$SOURCE_SHA" --generate-notes \
+            --title "$TAG" \
+            --notes "Container image: \`$IMAGE:$TAG@$DIGEST\`"

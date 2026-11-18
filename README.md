@@ -4,7 +4,7 @@ D2 원문을 SVG로 변환하는 Go HTTP 서비스입니다. 요청을 받은 Go
 
 ## 실행
 
-Go 1.27.0 이상이 필요합니다.
+Go 1.27.4 이상이 필요합니다.
 
 ```sh
 go run .
@@ -13,8 +13,7 @@ go run .
 기본 주소는 `127.0.0.1:8080`입니다. 컨테이너 이미지의 기본 주소는 `:8080`이며 `LISTEN_ADDR`로 바꿀 수 있습니다. API 인증 없이 동작하므로 운영에서는 허용된 서비스가 접근하는 내부 네트워크에 둡니다.
 
 ```sh
-docker build -t d2-diagram-renderer .
-docker run --rm -p 127.0.0.1:8080:8080 d2-diagram-renderer
+docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/cagojeiger/d2-diagram-renderer:v0.1.0
 ```
 
 ## API
@@ -40,3 +39,14 @@ D2 파일 import는 비활성화합니다. 반환한 SVG는 브라우저에서 `
 ```sh
 go test ./...
 ```
+
+## 릴리즈
+
+새 버전은 `VERSION`과 `openapi.yaml`의 `info.version`에 적습니다. main의
+CI가 통과하면 Linux amd64·arm64 이미지를 만들고, 두 이미지로 1,024개 노드
+샘플을 렌더링합니다. 테스트한 이미지 digest를 버전 태그로 발행하고 GitHub
+릴리즈에 기록합니다. 이미지에는 SBOM과 빌드 provenance가 첨부됩니다.
+
+## 라이선스
+
+[Apache-2.0](LICENSE). D2의 라이선스와 소스는 [제3자 고지](THIRD_PARTY_NOTICES.md)에 있습니다.
